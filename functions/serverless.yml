@@ -11,6 +11,7 @@ provider:
     STAGE: ${self:provider.stage}
     USERS_TABLE: ${self:service}-users-${self:provider.stage}
     POSTS_TABLE: ${self:service}-posts-${self:provider.stage}
+    VIRUS_DETECTIONS_TABLE: ${self:service}-virus-detections-${self:provider.stage}
     MEDIA_BUCKET:
       Ref: MediaBucket
     USER_POOL_ID:
@@ -33,17 +34,28 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}/index/*
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.POSTS_TABLE}
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.POSTS_TABLE}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.VIRUS_DETECTIONS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.VIRUS_DETECTIONS_TABLE}/index/*
         - Effect: Allow
           Action:
             - s3:GetObject
             - s3:PutObject
             - s3:DeleteObject
+            - s3:ListObjectsV2
           Resource:
             Fn::Join:
               - ""
               - - "arn:aws:s3:::"
                 - Ref: MediaBucket
                 - "/*"
+        - Effect: Allow
+          Action:
+            - s3:ListBucket
+          Resource:
+            Fn::Join:
+              - ""
+              - - "arn:aws:s3:::"
+                - Ref: MediaBucket
         - Effect: Allow
           Action:
             - cognito-idp:AdminCreateUser
@@ -691,6 +703,105 @@ functions:
                 responseModels:
                   application/json: "Error"
 
+  # Virus Scanning
+  virusScan:
+    handler: src/handlers/virusScan.scan
+    timeout: 60
+    memorySize: 512
+    events:
+      - s3:
+          bucket:
+            Ref: MediaBucket
+          event: s3:ObjectCreated:*
+          existing: true
+          rules:
+            - prefix: media/
+
+  # Security Dashboard (Admin Only)
+  getSecurityDashboard:
+    handler: src/handlers/security.getDashboard
+    events:
+      - http:
+          path: /security/dashboard
+          method: get
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+          authorizer:
+            name: CognitoAuthorizer
+            type: COGNITO_USER_POOLS
+            arn: ${self:custom.cognitoUserPoolArn}
+          documentation:
+            summary: Get security dashboard metrics
+            description: Returns security metrics including file counts, threat detections, and recent threats. Admin only.
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Security metrics retrieved successfully
+              - statusCode: 401
+                responseBody:
+                  description: Unauthorized - missing or invalid token
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 403
+                responseBody:
+                  description: Forbidden - admin access required
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  getSecurityDetections:
+    handler: src/handlers/security.getDetections
+    events:
+      - http:
+          path: /security/detections
+          method: get
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+          authorizer:
+            name: CognitoAuthorizer
+            type: COGNITO_USER_POOLS
+            arn: ${self:custom.cognitoUserPoolArn}
+          documentation:
+            summary: Get virus detection records
+            description: Returns list of virus detections. Can be filtered by userId. Admin only.
+            queryParams:
+              - name: userId
+                description: Filter detections by user ID
+                required: false
+                schema:
+                  type: string
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Detections retrieved successfully
+              - statusCode: 401
+                responseBody:
+                  description: Unauthorized - missing or invalid token
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 403
+                responseBody:
+                  description: Forbidden - admin access required
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
 resources:
   Resources:
     UsersTable:
@@ -745,6 +856,31 @@ resources:
               - AttributeName: published
                 KeyType: HASH
               - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    VirusDetectionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.VIRUS_DETECTIONS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: detectedAt
+            AttributeType: N
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: userId-detectedAt-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: detectedAt
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
@@ -817,6 +953,46 @@ resources:
           - ALLOW_USER_PASSWORD_AUTH
           - ALLOW_REFRESH_TOKEN_AUTH
         PreventUserExistenceErrors: ENABLED
+
+    # Gateway Responses for CORS support
+    GatewayResponseAccessDenied:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        ResponseType: ACCESS_DENIED
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ResponseTemplates:
+          application/json: '{"message":"$context.error.message","error":"Forbidden"}'
+
+    GatewayResponseUnauthorized:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        ResponseType: UNAUTHORIZED
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ResponseTemplates:
+          application/json: '{"message":"$context.error.message","error":"Unauthorized"}'
+
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ResponseTemplates:
+          application/json: '{"message":"$context.error.message","error":"Bad Request"}'
 
   Outputs:
     UserPoolId:

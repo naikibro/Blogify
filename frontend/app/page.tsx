@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, LogOut, LogIn } from "lucide-react";
+import { Plus, LogOut, LogIn, Shield } from "lucide-react";
 
 export default function Home() {
   const { user, logout, isAuthenticated } = useAuth();
@@ -74,6 +74,14 @@ export default function Home() {
                     New Post
                   </Button>
                 </Link>
+                {user?.role === "admin" && (
+                  <Link href="/security">
+                    <Button variant="outline" size="sm">
+                      <Shield className="mr-2 h-4 w-4" />
+                      Security
+                    </Button>
+                  </Link>
+                )}
                 <span className="text-sm text-muted-foreground">
                   {user?.email}
                 </span>
