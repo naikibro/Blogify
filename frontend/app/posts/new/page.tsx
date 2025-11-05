@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { usePostForm } from "@/lib/hooks/usePostForm";
 import { Button } from "@/components/ui/button";
@@ -103,9 +104,11 @@ export default function NewPostPage() {
                 {mediaPreview || formData.mediaUrl ? (
                   <div className="relative">
                     {formData.mediaType?.startsWith("image") ? (
-                      <img
-                        src={mediaPreview || formData.mediaUrl}
+                      <Image
+                        src={mediaPreview || formData.mediaUrl || ""}
                         alt="Preview"
+                        width={800}
+                        height={256}
                         className="w-full h-64 object-cover rounded-lg"
                       />
                     ) : formData.mediaType?.startsWith("video") ? (
