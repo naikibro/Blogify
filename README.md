@@ -88,8 +88,8 @@ graph TB
 
     Client -.->|Direct Upload/Download| S3
 
-    style API fill:#FF9900
-    style Lambda fill:#FF9900
+    style API fill:#FF9900,color:#fff
+    style Lambda fill:#FF9900,color:#fff
     style Cognito fill:#232F3E,color:#fff
     style UsersTable fill:#4A90E2,color:#fff
     style PostsTable fill:#4A90E2,color:#fff
