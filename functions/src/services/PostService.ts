@@ -15,6 +15,11 @@ import { CognitoUser } from "../utils/cognito";
 
 const POSTS_TABLE = process.env.POSTS_TABLE || "";
 
+// DynamoDB item type (published stored as string for GSI)
+interface DynamoDBPost extends Omit<BlogPost, "published"> {
+  published: string; // Stored as "true" or "false" for GSI compatibility
+}
+
 export interface ListPostsOptions {
   published?: string;
   authorId?: string;
@@ -41,13 +46,14 @@ export class PostService {
     const now = Date.now();
     const published = request.published || false;
 
-    const post: BlogPost = {
+    // Store published as string for GSI compatibility, but keep boolean in response
+    const post: DynamoDBPost = {
       id,
       title: request.title,
       content: request.content,
       authorId: author.userId,
       authorEmail: author.email,
-      published,
+      published: published ? "true" : "false", // Store as string for GSI
       publishedStatus: published ? "true" : "false",
       createdAt: now,
       updatedAt: now,
@@ -64,7 +70,11 @@ export class PostService {
       })
     );
 
-    return post;
+    // Return with boolean published for API consistency
+    return {
+      ...post,
+      published, // Convert back to boolean
+    };
   }
 
   /**
@@ -78,7 +88,20 @@ export class PostService {
       })
     );
 
-    return (result.Item as BlogPost) || null;
+    if (!result.Item) {
+      return null;
+    }
+
+    // Convert published from string to boolean for API consistency
+    const item = result.Item as unknown as DynamoDBPost;
+    const publishedValue =
+      typeof item.published === "string"
+        ? item.published
+        : String(item.published);
+    return {
+      ...item,
+      published: publishedValue === "true",
+    } as BlogPost;
   }
 
   /**
@@ -93,24 +116,37 @@ export class PostService {
 
     if (authorId) {
       result = await this.queryByAuthor(authorId, published, limit, lastKey);
-      posts = (result.Items || []) as BlogPost[];
+      posts = (result.Items || []) as unknown as BlogPost[];
     } else if (published === "true" || published === "false") {
       result = await this.queryByPublishedStatus(
         published === "true",
         limit,
         lastKey
       );
-      posts = (result.Items || []) as BlogPost[];
+      posts = (result.Items || []) as unknown as BlogPost[];
     } else {
       result = await this.scanAllPosts(limit, lastKey);
-      posts = (result.Items || []) as BlogPost[];
+      posts = (result.Items || []) as unknown as BlogPost[];
       // Sort by createdAt descending
       posts.sort((a, b) => b.createdAt - a.createdAt);
     }
 
+    // Convert published from string to boolean for API consistency
+    const normalizedPosts = posts.map((post) => {
+      const dbPost = post as unknown as DynamoDBPost;
+      const publishedValue =
+        typeof dbPost.published === "string"
+          ? dbPost.published
+          : String(dbPost.published);
+      return {
+        ...dbPost,
+        published: publishedValue === "true",
+      } as BlogPost;
+    });
+
     return {
-      posts,
-      count: posts.length,
+      posts: normalizedPosts,
+      count: normalizedPosts.length,
       hasMore: !!result.LastEvaluatedKey,
       lastKey: result.LastEvaluatedKey
         ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString(
@@ -134,7 +170,7 @@ export class PostService {
       }
     }
     if (updates.published !== undefined) {
-      updateData.published = updates.published;
+      updateData.published = updates.published ? "true" : "false"; // Store as string for GSI
       updateData.publishedStatus = updates.published ? "true" : "false";
     }
     if (updates.tags !== undefined) updateData.tags = updates.tags;
@@ -170,6 +206,7 @@ export class PostService {
       throw new Error("Post not found after update");
     }
 
+    // getPostById already normalizes published to boolean
     return updated;
   }
 
@@ -235,9 +272,9 @@ export class PostService {
     const queryParams: QueryCommandInput = {
       TableName: POSTS_TABLE,
       IndexName: "published-createdAt-index",
-      KeyConditionExpression: "publishedStatus = :publishedStatus",
+      KeyConditionExpression: "published = :published",
       ExpressionAttributeValues: {
-        ":publishedStatus": published ? "true" : "false",
+        ":published": published ? "true" : "false",
       },
       ScanIndexForward: false,
       Limit: limit,

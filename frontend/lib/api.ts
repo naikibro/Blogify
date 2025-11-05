@@ -65,6 +65,35 @@ export interface MediaDownloadResponse {
   expiresIn: number;
 }
 
+export interface VirusDetection {
+  id: string;
+  s3Key: string;
+  bucket: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  detectedAt: number;
+  threatType: string;
+  threatName: string;
+  userId?: string;
+  userEmail?: string;
+  status: "detected" | "quarantined" | "resolved";
+}
+
+export interface SecurityMetrics {
+  totalFiles: number;
+  totalScanned: number;
+  threatsDetected: number;
+  threatsByType: Record<string, number>;
+  recentThreats: VirusDetection[];
+  scanRate: number;
+}
+
+export interface DetectionsResponse {
+  detections: VirusDetection[];
+  count: number;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -201,5 +230,17 @@ export const mediaApi = {
 
   getDownloadUrl: async (key: string): Promise<MediaDownloadResponse> => {
     return request<MediaDownloadResponse>(`/media/${key}`);
+  },
+};
+
+// Security endpoints (Admin only)
+export const securityApi = {
+  getDashboard: async (): Promise<SecurityMetrics> => {
+    return request<SecurityMetrics>("/security/dashboard");
+  },
+
+  getDetections: async (userId?: string): Promise<DetectionsResponse> => {
+    const params = userId ? `?userId=${userId}` : "";
+    return request<DetectionsResponse>(`/security/detections${params}`);
   },
 };

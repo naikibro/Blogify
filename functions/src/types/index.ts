@@ -69,3 +69,27 @@ export interface UpdatePostRequest {
   mediaUrl?: string;
   mediaType?: string;
 }
+
+export interface VirusDetection {
+  id: string;
+  s3Key: string;
+  bucket: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  detectedAt: number;
+  threatType: string;
+  threatName: string;
+  userId?: string;
+  userEmail?: string;
+  status: "detected" | "quarantined" | "resolved";
+}
+
+export interface SecurityMetrics {
+  totalFiles: number;
+  totalScanned: number;
+  threatsDetected: number;
+  threatsByType: Record<string, number>;
+  recentThreats: VirusDetection[];
+  scanRate: number; // percentage
+}
