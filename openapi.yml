@@ -1,0 +1,482 @@
+openapi: 3.1.0
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+    AuthRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+        password:
+          type: string
+          format: password
+          description: "User password (min 8 chars, uppercase, lowercase, number)"
+        role:
+          type: string
+          enum:
+            - admin
+            - editor
+            - guest_author
+          description: "User role (optional, defaults to guest_author)"
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: Cognito access token
+        refreshToken:
+          type: string
+          description: Cognito refresh token
+        idToken:
+          type: string
+          description: Cognito ID token (use this for Authorization header)
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum:
+            - admin
+            - editor
+            - guest_author
+    BlogPost:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        authorId:
+          type: string
+        authorEmail:
+          type: string
+        published:
+          type: boolean
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+        excerpt:
+          type: string
+    CreatePostRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          description: Post title
+        content:
+          type: string
+          description: Post content
+        published:
+          type: boolean
+          default: false
+          description: Whether the post is published
+        tags:
+          type: array
+          items:
+            type: string
+          description: Post tags
+        excerpt:
+          type: string
+          description: Post excerpt (auto-generated if not provided)
+    UpdatePostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        published:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        excerpt:
+          type: string
+    PostListResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              content:
+                type: string
+              authorId:
+                type: string
+              authorEmail:
+                type: string
+              published:
+                type: boolean
+              createdAt:
+                type: number
+              updatedAt:
+                type: number
+              tags:
+                type: array
+                items:
+                  type: string
+              excerpt:
+                type: string
+        count:
+          type: number
+    MediaUploadRequest:
+      type: object
+      required:
+        - fileName
+        - contentType
+      properties:
+        fileName:
+          type: string
+          description: Name of the file to upload
+        contentType:
+          type: string
+          description: "MIME type of the file (e.g., image/jpeg, video/mp4)"
+    MediaUploadResponse:
+      type: object
+      properties:
+        uploadUrl:
+          type: string
+          description: Presigned URL for uploading the file
+        key:
+          type: string
+          description: S3 key for the uploaded file
+        expiresIn:
+          type: number
+          description: URL expiration time in seconds
+    MediaDownloadResponse:
+      type: object
+      properties:
+        downloadUrl:
+          type: string
+          description: Presigned URL for downloading the file
+        expiresIn:
+          type: number
+          description: URL expiration time in seconds
+  securitySchemes: {}
+info:
+  title: Blogify API
+  description: >-
+    Headless blogging platform API for content creators, journalists, and
+    businesses
+  version: 1.0.0
+paths:
+  //auth/register:
+    post:
+      operationId: register
+      summary: Register a new user
+      description: >-
+        Creates a new user account in Cognito and stores user metadata in
+        DynamoDB
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  //auth/login:
+    post:
+      operationId: login
+      summary: Login user
+      description: Authenticates user credentials and returns Cognito tokens
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  //posts:
+    post:
+      operationId: createPost
+      summary: Create a new blog post
+      description: Creates a new blog post. Requires authentication with Cognito ID token.
+      responses:
+        "201":
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: listPosts
+      summary: List all blog posts
+      description: >-
+        Retrieves a list of blog posts. Supports filtering by published status
+        and author.
+      responses:
+        "200":
+          description: Posts retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostListResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  "//posts/{id}":
+    get:
+      operationId: getPost
+      summary: Get a specific blog post
+      description: >-
+        Retrieves a blog post by its ID. Public endpoint, no authentication
+        required.
+      responses:
+        "200":
+          description: Post retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        "400":
+          description: Invalid post ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: updatePost
+      summary: Update a blog post
+      description: >-
+        Updates an existing blog post. User must be the post owner or an admin.
+        Requires authentication with Cognito ID token.
+      responses:
+        "200":
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - user is not the post owner or admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deletePost
+      summary: Delete a blog post
+      description: >-
+        Deletes a blog post. User must be the post owner or an admin. Requires
+        authentication with Cognito ID token.
+      responses:
+        "200":
+          description: Post deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - user is not the post owner or admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  //media/upload:
+    post:
+      operationId: uploadMedia
+      summary: Get presigned URL for media upload
+      description: >-
+        Generates a presigned S3 URL for uploading media files. Requires
+        authentication with Cognito ID token.
+      responses:
+        "200":
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaUploadResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  "//media/{key}":
+    get:
+      operationId: getMedia
+      summary: Get presigned URL for media download
+      description: >-
+        Generates a presigned S3 URL for downloading media files. Public
+        endpoint.
+      responses:
+        "200":
+          description: Download URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaDownloadResponse"
+        "400":
+          description: Invalid media key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

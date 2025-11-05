@@ -1,0 +1,788 @@
+service: blogify
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    USERS_TABLE: ${self:service}-users-${self:provider.stage}
+    POSTS_TABLE: ${self:service}-posts-${self:provider.stage}
+    MEDIA_BUCKET: blogify-media-${self:provider.stage}
+    USER_POOL_ID:
+      Ref: CognitoUserPool
+    USER_POOL_CLIENT_ID:
+      Ref: CognitoUserPoolClient
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.POSTS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.POSTS_TABLE}/index/*
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::${self:provider.environment.MEDIA_BUCKET}/*
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminCreateUser
+            - cognito-idp:AdminSetUserPassword
+            - cognito-idp:AdminGetUser
+            - cognito-idp:InitiateAuth
+            - cognito-idp:RespondToAuthChallenge
+            - cognito-idp:GetUser
+          Resource:
+            - Fn::GetAtt: [CognitoUserPool, Arn]
+
+plugins:
+  - serverless-offline
+  - serverless-openapi-documentation
+
+custom:
+  cognitoUserPoolArn:
+    Fn::GetAtt: [CognitoUserPool, Arn]
+
+  documentation:
+    version: "1.0.0"
+    title: "Blogify API"
+    description: "Headless blogging platform API for content creators, journalists, and businesses"
+    models:
+      - name: Error
+        description: "Error response"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              description: "Error message"
+
+      - name: AuthRequest
+        description: "Authentication request"
+        contentType: "application/json"
+        schema:
+          type: object
+          required:
+            - email
+            - password
+          properties:
+            email:
+              type: string
+              format: email
+              description: "User email address"
+            password:
+              type: string
+              format: password
+              description: "User password (min 8 chars, uppercase, lowercase, number)"
+            role:
+              type: string
+              enum: ["admin", "editor", "guest_author"]
+              description: "User role (optional, defaults to guest_author)"
+
+      - name: AuthResponse
+        description: "Authentication response"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              description: "Cognito access token"
+            refreshToken:
+              type: string
+              description: "Cognito refresh token"
+            idToken:
+              type: string
+              description: "Cognito ID token (use this for Authorization header)"
+            user:
+              type: object
+              properties:
+                id:
+                  type: string
+                email:
+                  type: string
+                role:
+                  type: string
+
+      - name: User
+        description: "User object"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+              enum: ["admin", "editor", "guest_author"]
+
+      - name: BlogPost
+        description: "Blog post"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            content:
+              type: string
+            authorId:
+              type: string
+            authorEmail:
+              type: string
+            published:
+              type: boolean
+            createdAt:
+              type: number
+            updatedAt:
+              type: number
+            tags:
+              type: array
+              items:
+                type: string
+            excerpt:
+              type: string
+
+      - name: CreatePostRequest
+        description: "Create blog post request"
+        contentType: "application/json"
+        schema:
+          type: object
+          required:
+            - title
+            - content
+          properties:
+            title:
+              type: string
+              description: "Post title"
+            content:
+              type: string
+              description: "Post content"
+            published:
+              type: boolean
+              default: false
+              description: "Whether the post is published"
+            tags:
+              type: array
+              items:
+                type: string
+              description: "Post tags"
+            excerpt:
+              type: string
+              description: "Post excerpt (auto-generated if not provided)"
+
+      - name: UpdatePostRequest
+        description: "Update blog post request"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            title:
+              type: string
+            content:
+              type: string
+            published:
+              type: boolean
+            tags:
+              type: array
+              items:
+                type: string
+            excerpt:
+              type: string
+
+      - name: PostListResponse
+        description: "List of blog posts"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            posts:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                  content:
+                    type: string
+                  authorId:
+                    type: string
+                  authorEmail:
+                    type: string
+                  published:
+                    type: boolean
+                  createdAt:
+                    type: number
+                  updatedAt:
+                    type: number
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                  excerpt:
+                    type: string
+            count:
+              type: number
+
+      - name: MediaUploadRequest
+        description: "Media upload request"
+        contentType: "application/json"
+        schema:
+          type: object
+          required:
+            - fileName
+            - contentType
+          properties:
+            fileName:
+              type: string
+              description: "Name of the file to upload"
+            contentType:
+              type: string
+              description: "MIME type of the file (e.g., image/jpeg, video/mp4)"
+
+      - name: MediaUploadResponse
+        description: "Media upload response"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            uploadUrl:
+              type: string
+              description: "Presigned URL for uploading the file"
+            key:
+              type: string
+              description: "S3 key for the uploaded file"
+            expiresIn:
+              type: number
+              description: "URL expiration time in seconds"
+
+      - name: MediaDownloadResponse
+        description: "Media download response"
+        contentType: "application/json"
+        schema:
+          type: object
+          properties:
+            downloadUrl:
+              type: string
+              description: "Presigned URL for downloading the file"
+            expiresIn:
+              type: number
+              description: "URL expiration time in seconds"
+
+functions:
+  # Define authorizer once
+  # Note: Cognito authorizer is automatically handled by API Gateway
+  # Authentication
+  register:
+    handler: src/handlers/auth.register
+    events:
+      - http:
+          path: /auth/register
+          method: post
+          cors: true
+          documentation:
+            summary: Register a new user
+            description: Creates a new user account in Cognito and stores user metadata in DynamoDB
+            requestBody:
+              description: User registration data
+            requestModels:
+              application/json: "AuthRequest"
+            methodResponses:
+              - statusCode: 201
+                responseBody:
+                  description: User created successfully
+                responseModels:
+                  application/json: "AuthResponse"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid request data
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 409
+                responseBody:
+                  description: User already exists
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  login:
+    handler: src/handlers/auth.login
+    events:
+      - http:
+          path: /auth/login
+          method: post
+          cors: true
+          documentation:
+            summary: Login user
+            description: Authenticates user credentials and returns Cognito tokens
+            requestBody:
+              description: User login credentials
+            requestModels:
+              application/json: "AuthRequest"
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Login successful
+                responseModels:
+                  application/json: "AuthResponse"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid request data
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 401
+                responseBody:
+                  description: Invalid credentials
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  # Blog Posts
+  createPost:
+    handler: src/handlers/posts.create
+    events:
+      - http:
+          path: /posts
+          method: post
+          cors: true
+          authorizer:
+            name: CognitoAuthorizer
+            type: COGNITO_USER_POOLS
+            arn: ${self:custom.cognitoUserPoolArn}
+          documentation:
+            summary: Create a new blog post
+            description: Creates a new blog post. Requires authentication with Cognito ID token.
+            requestBody:
+              description: Blog post data
+            requestModels:
+              application/json: "CreatePostRequest"
+            methodResponses:
+              - statusCode: 201
+                responseBody:
+                  description: Post created successfully
+                responseModels:
+                  application/json: "BlogPost"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid request data
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 401
+                responseBody:
+                  description: Unauthorized - missing or invalid token
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  getPost:
+    handler: src/handlers/posts.get
+    events:
+      - http:
+          path: /posts/{id}
+          method: get
+          cors: true
+          documentation:
+            summary: Get a specific blog post
+            description: Retrieves a blog post by its ID. Public endpoint, no authentication required.
+            pathParams:
+              - name: id
+                description: Blog post ID
+                schema:
+                  type: string
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Post retrieved successfully
+                responseModels:
+                  application/json: "BlogPost"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid post ID
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 404
+                responseBody:
+                  description: Post not found
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  listPosts:
+    handler: src/handlers/posts.list
+    events:
+      - http:
+          path: /posts
+          method: get
+          cors: true
+          documentation:
+            summary: List all blog posts
+            description: Retrieves a list of blog posts. Supports filtering by published status and author.
+            queryParams:
+              - name: published
+                description: Filter by published status (true/false)
+                required: false
+                schema:
+                  type: string
+                  enum: ["true", "false"]
+              - name: authorId
+                description: Filter posts by author ID
+                required: false
+                schema:
+                  type: string
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Posts retrieved successfully
+                responseModels:
+                  application/json: "PostListResponse"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  updatePost:
+    handler: src/handlers/posts.update
+    events:
+      - http:
+          path: /posts/{id}
+          method: put
+          cors: true
+          authorizer:
+            name: CognitoAuthorizer
+            type: COGNITO_USER_POOLS
+            arn: ${self:custom.cognitoUserPoolArn}
+          documentation:
+            summary: Update a blog post
+            description: Updates an existing blog post. User must be the post owner or an admin. Requires authentication with Cognito ID token.
+            pathParams:
+              - name: id
+                description: Blog post ID
+                schema:
+                  type: string
+            requestBody:
+              description: Updated post data (all fields optional)
+            requestModels:
+              application/json: "UpdatePostRequest"
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Post updated successfully
+                responseModels:
+                  application/json: "BlogPost"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid request data
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 401
+                responseBody:
+                  description: Unauthorized - missing or invalid token
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 403
+                responseBody:
+                  description: Forbidden - user is not the post owner or admin
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 404
+                responseBody:
+                  description: Post not found
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  deletePost:
+    handler: src/handlers/posts.delete
+    events:
+      - http:
+          path: /posts/{id}
+          method: delete
+          cors: true
+          authorizer:
+            name: CognitoAuthorizer
+            type: COGNITO_USER_POOLS
+            arn: ${self:custom.cognitoUserPoolArn}
+          documentation:
+            summary: Delete a blog post
+            description: Deletes a blog post. User must be the post owner or an admin. Requires authentication with Cognito ID token.
+            pathParams:
+              - name: id
+                description: Blog post ID
+                schema:
+                  type: string
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Post deleted successfully
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 401
+                responseBody:
+                  description: Unauthorized - missing or invalid token
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 403
+                responseBody:
+                  description: Forbidden - user is not the post owner or admin
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 404
+                responseBody:
+                  description: Post not found
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  # Media Management
+  uploadMedia:
+    handler: src/handlers/media.upload
+    events:
+      - http:
+          path: /media/upload
+          method: post
+          cors: true
+          authorizer:
+            name: CognitoAuthorizer
+            type: COGNITO_USER_POOLS
+            arn: ${self:custom.cognitoUserPoolArn}
+          documentation:
+            summary: Get presigned URL for media upload
+            description: Generates a presigned S3 URL for uploading media files. Requires authentication with Cognito ID token.
+            requestBody:
+              description: Media upload request
+            requestModels:
+              application/json: "MediaUploadRequest"
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Upload URL generated successfully
+                responseModels:
+                  application/json: "MediaUploadResponse"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid request data
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 401
+                responseBody:
+                  description: Unauthorized - missing or invalid token
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+  getMedia:
+    handler: src/handlers/media.get
+    events:
+      - http:
+          path: /media/{key}
+          method: get
+          cors: true
+          documentation:
+            summary: Get presigned URL for media download
+            description: Generates a presigned S3 URL for downloading media files. Public endpoint.
+            pathParams:
+              - name: key
+                description: S3 key of the media file
+                schema:
+                  type: string
+            methodResponses:
+              - statusCode: 200
+                responseBody:
+                  description: Download URL generated successfully
+                responseModels:
+                  application/json: "MediaDownloadResponse"
+              - statusCode: 400
+                responseBody:
+                  description: Invalid media key
+                responseModels:
+                  application/json: "Error"
+              - statusCode: 500
+                responseBody:
+                  description: Internal server error
+                responseModels:
+                  application/json: "Error"
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.USERS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: email-index
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    PostsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.POSTS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: authorId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: N
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: authorId-createdAt-index
+            KeySchema:
+              - AttributeName: authorId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    MediaBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+                - HEAD
+              AllowedOrigins:
+                - "*"
+              MaxAge: 3000
+
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: ${self:service}-user-pool-${self:provider.stage}
+        AutoVerifiedAttributes:
+          - email
+        UsernameAttributes:
+          - email
+        Schema:
+          - Name: email
+            Required: true
+            Mutable: true
+          - Name: role
+            Required: false
+            Mutable: true
+            AttributeDataType: String
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireUppercase: true
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: ${self:service}-client-${self:provider.stage}
+        UserPoolId:
+          Ref: CognitoUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+        PreventUserExistenceErrors: ENABLED
+
+  Outputs:
+    UserPoolId:
+      Value:
+        Ref: CognitoUserPool
+      Export:
+        Name: ${self:provider.stage}-UserPoolId
+
+    UserPoolClientId:
+      Value:
+        Ref: CognitoUserPoolClient
+      Export:
+        Name: ${self:provider.stage}-UserPoolClientId
+
+    MediaBucketName:
+      Value:
+        Ref: MediaBucket
+      Export:
+        Name: ${self:provider.stage}-MediaBucketName
+
+    ApiGatewayRestApiId:
+      Value:
+        Ref: ApiGatewayRestApi
+      Export:
+        Name: ${self:provider.stage}-ApiGatewayRestApiId
+
+    ApiGatewayRestApiRootResourceId:
+      Value:
+        Fn::GetAtt:
+          - ApiGatewayRestApi
+          - RootResourceId
+      Export:
+        Name: ${self:provider.stage}-ApiGatewayRestApiRootResourceId
