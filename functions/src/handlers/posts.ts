@@ -25,7 +25,15 @@ export const create = async (
     }
 
     const body: CreatePostRequest = JSON.parse(event.body || "{}");
-    const { title, content, published = false, tags, excerpt } = body;
+    const {
+      title,
+      content,
+      published = false,
+      tags,
+      excerpt,
+      mediaUrl,
+      mediaType,
+    } = body;
 
     if (!title || !content) {
       return error("Title and content are required", 400);
@@ -45,6 +53,8 @@ export const create = async (
       updatedAt: now,
       tags: tags || [],
       excerpt: excerpt || content.substring(0, 200),
+      mediaUrl,
+      mediaType,
     };
 
     await dynamoClient.send(
@@ -170,6 +180,8 @@ export const update = async (
     if (body.published !== undefined) updates.published = body.published;
     if (body.tags !== undefined) updates.tags = body.tags;
     if (body.excerpt !== undefined) updates.excerpt = body.excerpt;
+    if (body.mediaUrl !== undefined) updates.mediaUrl = body.mediaUrl;
+    if (body.mediaType !== undefined) updates.mediaType = body.mediaType;
 
     const updateExpression = Object.keys(updates)
       .map((key, index) => `${key} = :val${index}`)

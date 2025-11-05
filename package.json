@@ -2,44 +2,30 @@
   "name": "blogify",
   "version": "1.0.0",
   "description": "Headless blogging platform using AWS Lambda",
-  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "functions",
+    "frontend"
+  ],
   "scripts": {
-    "dev": "serverless offline",
-    "deploy": "serverless deploy",
-    "deploy:dev": "serverless deploy --stage dev",
-    "deploy:prod": "serverless deploy --stage prod",
-    "remove": "serverless remove",
-    "lint": "eslint . --ext .ts",
-    "type-check": "tsc --noEmit",
-    "docs:generate": "serverless openapi generate",
-    "docs:serve": "npx swagger-ui-watcher openapi.yml"
+    "dev:functions": "yarn workspace @blogify/functions dev",
+    "dev:frontend": "yarn workspace @blogify/frontend dev",
+    "deploy:functions": "yarn workspace @blogify/functions deploy",
+    "deploy:functions:dev": "yarn workspace @blogify/functions deploy:dev",
+    "deploy:functions:prod": "yarn workspace @blogify/functions deploy:prod",
+    "build:functions": "yarn workspace @blogify/functions type-check",
+    "build:frontend": "yarn workspace @blogify/frontend build",
+    "lint": "yarn workspaces run lint"
   },
   "keywords": [
     "serverless",
     "aws",
     "lambda",
     "blogging",
-    "typescript"
+    "typescript",
+    "nextjs"
   ],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "@types/aws-lambda": "^8.10.130",
-    "@types/node": "^20.11.0",
-    "@types/uuid": "^9.0.7",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
-    "eslint": "^8.56.0",
-    "serverless-offline": "^13.3.0",
-    "serverless-openapi-documentation": "^0.4.0",
-    "typescript": "^5.3.3"
-  },
-  "dependencies": {
-    "@aws-sdk/client-cognito-identity-provider": "^3.490.0",
-    "@aws-sdk/client-dynamodb": "^3.490.0",
-    "@aws-sdk/client-s3": "^3.490.0",
-    "@aws-sdk/lib-dynamodb": "^3.490.0",
-    "@aws-sdk/s3-request-presigner": "^3.490.0",
-    "uuid": "^9.0.1"
-  }
+  "packageManager": "yarn@1.22.0"
 }

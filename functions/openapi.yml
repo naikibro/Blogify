@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.3
 components:
   schemas:
     Error:
@@ -199,7 +199,7 @@ info:
     businesses
   version: 1.0.0
 paths:
-  //auth/register:
+  /auth/register:
     post:
       operationId: register
       summary: Register a new user
@@ -231,7 +231,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  //auth/login:
+  /auth/login:
     post:
       operationId: login
       summary: Login user
@@ -261,7 +261,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  //posts:
+  /posts:
     post:
       operationId: createPost
       summary: Create a new blog post
@@ -310,13 +310,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  "//posts/{id}":
+  /posts/{id}:
     get:
       operationId: getPost
       summary: Get a specific blog post
       description: >-
         Retrieves a blog post by its ID. Public endpoint, no authentication
         required.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the blog post
+          schema:
+            type: string
       responses:
         "200":
           description: Post retrieved successfully
@@ -348,6 +355,13 @@ paths:
       description: >-
         Updates an existing blog post. User must be the post owner or an admin.
         Requires authentication with Cognito ID token.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the blog post to update
+          schema:
+            type: string
       responses:
         "200":
           description: Post updated successfully
@@ -391,6 +405,13 @@ paths:
       description: >-
         Deletes a blog post. User must be the post owner or an admin. Requires
         authentication with Cognito ID token.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the blog post to delete
+          schema:
+            type: string
       responses:
         "200":
           description: Post deleted successfully
@@ -422,7 +443,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  //media/upload:
+  /media/upload:
     post:
       operationId: uploadMedia
       summary: Get presigned URL for media upload
@@ -454,13 +475,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  "//media/{key}":
+  /media/{key}:
     get:
       operationId: getMedia
       summary: Get presigned URL for media download
       description: >-
         Generates a presigned S3 URL for downloading media files. Public
         endpoint.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: The S3 key of the media file
+          schema:
+            type: string
       responses:
         "200":
           description: Download URL generated successfully

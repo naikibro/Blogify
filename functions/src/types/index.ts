@@ -24,6 +24,8 @@ export interface BlogPost {
   updatedAt: number;
   tags?: string[];
   excerpt?: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }
 
 export interface MediaItem {
@@ -53,6 +55,8 @@ export interface CreatePostRequest {
   published?: boolean;
   tags?: string[];
   excerpt?: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }
 
 export interface UpdatePostRequest {
@@ -61,4 +65,6 @@ export interface UpdatePostRequest {
   published?: boolean;
   tags?: string[];
   excerpt?: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }

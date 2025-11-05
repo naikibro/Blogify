@@ -87,8 +87,7 @@ export const register = async (
       201
     );
   } catch (err: any) {
-    console.error("Registration error:", JSON.stringify(err, null, 2));
-    console.error("Error name:", err?.name);
+    console.error("Registration error:", err?.name || "Unknown error");
     console.error("Error message:", err?.message);
     console.error("Error stack:", err?.stack);
 

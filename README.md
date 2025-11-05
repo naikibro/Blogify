@@ -1,133 +1,96 @@
 # Blogify - Headless Blogging Platform
 
-A serverless headless blogging platform built with AWS Lambda, DynamoDB, S3, and Cognito.
+Serverless blogging platform built with AWS Lambda, DynamoDB, S3, and Cognito.
+
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
+![React](https://img.shields.io/badge/React-18-61dafb?logo=react)
+![Node.js](https://img.shields.io/badge/Node.js-20-green?logo=node.js)
+![Serverless](https://img.shields.io/badge/Serverless-Framework-orange?logo=serverless)
+![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-FF9900?logo=aws-lambda)
+![DynamoDB](https://img.shields.io/badge/AWS-DynamoDB-4053D6?logo=amazon-dynamodb)
+![S3](https://img.shields.io/badge/AWS-S3-569A31?logo=amazon-s3)
+![Cognito](https://img.shields.io/badge/AWS-Cognito-232F3E?logo=amazon-aws)
 
 ## Features
 
-- **User Authentication**: Register and login with AWS Cognito User Pools
-- **Blog Posts CRUD**: Create, read, update, and delete blog posts
-- **Media Management**: Upload and retrieve media files via S3 presigned URLs
-- **Role-Based Access Control**: Admin, Editor, and Guest Author roles
+- User authentication with AWS Cognito
+- Full CRUD operations for blog posts
+- Media management via S3 presigned URLs
+- Role-based access control (Admin, Editor, Guest Author)
 
 ## Prerequisites
 
-- Node.js 20.x or higher
-- AWS CLI configured with appropriate credentials
-- Serverless Framework installed globally: `npm install -g serverless`
+- Node.js 20.x+
+- Yarn
+- AWS CLI configured
+- Serverless Framework: `yarn global add serverless`
 
-## Installation
-
-```bash
-npm install
-```
-
-## Configuration
-
-No additional configuration needed. Cognito User Pool and Client are automatically created during deployment.
-
-## Development
-
-Run locally with Serverless Offline:
+## Quick Start
 
 ```bash
-npm run dev
+# Install dependencies
+yarn install
+
+# Run backend locally
+yarn dev:functions  # API at http://localhost:3000
+
+# Run frontend locally
+yarn dev:frontend  # Frontend at http://localhost:4000
 ```
+
+**Frontend local API**: Create `frontend/.env.local` with `NEXT_PUBLIC_API_URL=http://localhost:3000/dev`
 
 ## Deployment
 
-Deploy to AWS:
-
 ```bash
-# Deploy to dev stage
-npm run deploy:dev
-
-# Deploy to production
-npm run deploy:prod
+yarn deploy:functions:dev   # Deploy to dev stage
+yarn deploy:functions:prod  # Deploy to production
 ```
-
-## Testing
-
-See [TESTING_PLAN.md](./TESTING_PLAN.md) for comprehensive testing procedures and test cases.
 
 ## API Documentation
 
-The API is documented using OpenAPI (Swagger) specification.
-
-### Generate OpenAPI Specification
-
 ```bash
-npm run docs:generate
+cd functions && yarn docs:generate  # Generate openapi.yml
+cd functions && yarn docs:serve     # View in Swagger UI
 ```
-
-This generates an `openapi.yml` file with the complete API specification.
-
-### View API Documentation
-
-To view the interactive API documentation:
-
-```bash
-npm run docs:serve
-```
-
-This will start a local Swagger UI server where you can explore and test all API endpoints.
-
-The OpenAPI specification is automatically generated from the `serverless.yml` configuration and includes:
-
-- All API endpoints with descriptions
-- Request/response schemas
-- Authentication requirements
-- Error responses
-- Query parameters and path parameters
-
-**Note**: The warnings about "unrecognized property 'documentation'" are expected and can be ignored. The plugin correctly processes the documentation despite these warnings.
-
-## API Endpoints
-
-### Authentication
-
-- `POST /auth/register` - Register a new user (body: `{ email, password, role? }`)
-- `POST /auth/login` - Login and get Cognito tokens (body: `{ email, password }`)
-  - Returns: `{ accessToken, refreshToken, idToken, user }`
-
-### Blog Posts
-
-- `GET /posts` - List all posts (query params: `published=true`, `authorId=xxx`)
-- `GET /posts/{id}` - Get a specific post
-- `POST /posts` - Create a new post (requires Cognito auth token)
-- `PUT /posts/{id}` - Update a post (requires Cognito auth token, must be owner or admin)
-- `DELETE /posts/{id}` - Delete a post (requires Cognito auth token, must be owner or admin)
-
-### Media
-
-- `POST /media/upload` - Get presigned URL for uploading media (requires Cognito auth token)
-- `GET /media/{key}` - Get presigned URL for downloading media
 
 ## Project Structure
 
 ```
-.
-├── src/
-│   ├── handlers/       # Lambda function handlers
-│   │   ├── auth.ts     # Authentication handlers
-│   │   ├── posts.ts    # Blog post handlers
-│   │   └── media.ts    # Media management handlers
-│   ├── types/          # TypeScript type definitions
-│   └── utils/          # Utility functions
-├── serverless.yml      # Serverless Framework configuration
-├── tsconfig.json       # TypeScript configuration
-└── package.json        # Dependencies
+├── functions/        # Serverless functions (Lambda handlers)
+├── frontend/         # Next.js frontend
+└── package.json      # Root workspace config
 ```
 
-## AWS Resources
+## AWS Architecture
 
-- **Cognito User Pool**: User authentication and authorization
-- **DynamoDB Tables**:
-  - `blogify-users-{stage}` - User metadata and roles
-  - `blogify-posts-{stage}` - Blog posts
-- **S3 Bucket**: `blogify-media-{stage}` - Media storage
-- **Lambda Functions**: All API handlers
-- **API Gateway**: REST API endpoints with Cognito authorizers
+The platform follows a serverless architecture pattern, where all components scale automatically and you only pay for what you use. Requests flow through API Gateway, which validates authentication via Cognito before routing to Lambda functions. Lambda functions interact with DynamoDB for structured data and generate presigned URLs for S3 media operations.
 
-## License
+```mermaid
+graph TB
+    Client[Frontend/Client] -->|HTTPS| API[API Gateway]
+    API -->|Auth| Cognito[Cognito User Pool]
+    API -->|Routes| Lambda[Lambda Functions]
 
-ISC
+    Lambda -->|CRUD| UsersTable[(DynamoDB<br/>blogify-users)]
+    Lambda -->|CRUD| PostsTable[(DynamoDB<br/>blogify-posts)]
+    Lambda -->|Presigned URLs| S3[S3 Bucket<br/>blogify-media]
+
+    Client -.->|Direct Upload/Download| S3
+
+    style API fill:#FF9900
+    style Lambda fill:#FF9900
+    style Cognito fill:#232F3E,color:#fff
+    style UsersTable fill:#4A90E2,color:#fff
+    style PostsTable fill:#4A90E2,color:#fff
+    style S3 fill:#569A31,color:#fff
+```
+
+**Components:**
+
+- **API Gateway** - REST API endpoint with Cognito authorizers for protected routes
+- **Cognito User Pool** - User authentication and authorization (email-based, password policies)
+- **Lambda Functions** - Serverless handlers for auth, posts, and media operations
+- **DynamoDB Tables** - `blogify-users-{stage}` (user metadata/roles), `blogify-posts-{stage}` (blog content with GSI on authorId)
+- **S3 Bucket** - `blogify-media-{stage}` - Media storage with CORS enabled for direct client uploads/downloads

@@ -11,7 +11,8 @@ provider:
     STAGE: ${self:provider.stage}
     USERS_TABLE: ${self:service}-users-${self:provider.stage}
     POSTS_TABLE: ${self:service}-posts-${self:provider.stage}
-    MEDIA_BUCKET: blogify-media-${self:provider.stage}
+    MEDIA_BUCKET:
+      Ref: MediaBucket
     USER_POOL_ID:
       Ref: CognitoUserPool
     USER_POOL_CLIENT_ID:
@@ -38,7 +39,11 @@ provider:
             - s3:PutObject
             - s3:DeleteObject
           Resource:
-            - arn:aws:s3:::${self:provider.environment.MEDIA_BUCKET}/*
+            Fn::Join:
+              - ""
+              - - "arn:aws:s3:::"
+                - Ref: MediaBucket
+                - "/*"
         - Effect: Allow
           Action:
             - cognito-idp:AdminCreateUser
@@ -49,6 +54,11 @@ provider:
             - cognito-idp:GetUser
           Resource:
             - Fn::GetAtt: [CognitoUserPool, Arn]
+  apiGateway:
+    binaryMediaTypes:
+      - multipart/form-data
+      - image/*
+      - video/*
 
 plugins:
   - serverless-offline
@@ -270,7 +280,10 @@ custom:
           properties:
             uploadUrl:
               type: string
-              description: "Presigned URL for uploading the file"
+              description: "Presigned URL for uploading the file (PUT request)"
+            mediaUrl:
+              type: string
+              description: "Presigned URL for downloading/accessing the file"
             key:
               type: string
               description: "S3 key for the uploaded file"
@@ -594,7 +607,7 @@ functions:
             arn: ${self:custom.cognitoUserPoolArn}
           documentation:
             summary: Get presigned URL for media upload
-            description: Generates a presigned S3 URL for uploading media files. Requires authentication with Cognito ID token.
+            description: Generates a presigned S3 URL for uploading media files. Client should upload directly to the returned presigned URL. Requires authentication with Cognito ID token.
             requestBody:
               description: Media upload request
             requestModels:
@@ -627,7 +640,12 @@ functions:
       - http:
           path: /media/{key}
           method: get
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
           documentation:
             summary: Get presigned URL for media download
             description: Generates a presigned S3 URL for downloading media files. Public endpoint.
@@ -704,6 +722,11 @@ resources:
     MediaBucket:
       Type: AWS::S3::Bucket
       Properties:
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders:
@@ -716,7 +739,14 @@ resources:
                 - HEAD
               AllowedOrigins:
                 - "*"
+              ExposedHeaders:
+                - ETag
+                - x-amz-server-side-encryption
+                - x-amz-request-id
+                - x-amz-id-2
               MaxAge: 3000
+        VersioningConfiguration:
+          Status: Enabled
 
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
@@ -753,6 +783,35 @@ resources:
           - ALLOW_USER_PASSWORD_AUTH
           - ALLOW_REFRESH_TOKEN_AUTH
         PreventUserExistenceErrors: ENABLED
+
+    MediaBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket:
+          Ref: MediaBucket
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal: "*"
+              Action: s3:GetObject
+              Resource:
+                Fn::Join:
+                  - ""
+                  - - "arn:aws:s3:::"
+                    - Ref: MediaBucket
+                    - "/*"
+            - Sid: AllowCORS
+              Effect: Allow
+              Principal: "*"
+              Action:
+                - s3:PutObject
+              Resource:
+                Fn::Join:
+                  - ""
+                  - - "arn:aws:s3:::"
+                    - Ref: MediaBucket
+                    - "/*"
 
   Outputs:
     UserPoolId:
