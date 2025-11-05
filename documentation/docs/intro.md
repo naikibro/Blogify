@@ -1,3 +1,9 @@
+---
+id: intro
+slug: /
+title: Overview
+---
+
 # Blogify - Headless Blogging Platform
 
 Serverless blogging platform built with AWS Lambda, DynamoDB, S3, and Cognito.

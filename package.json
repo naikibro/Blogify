@@ -5,16 +5,19 @@
   "private": true,
   "workspaces": [
     "functions",
-    "frontend"
+    "frontend",
+    "documentation"
   ],
   "scripts": {
     "dev:functions": "yarn workspace @blogify/functions dev",
     "dev:frontend": "yarn workspace @blogify/frontend dev",
+    "dev:docs": "yarn workspace documentation start",
     "deploy:functions": "yarn workspace @blogify/functions deploy",
     "deploy:functions:dev": "yarn workspace @blogify/functions deploy:dev",
     "deploy:functions:prod": "yarn workspace @blogify/functions deploy:prod",
     "build:functions": "yarn workspace @blogify/functions type-check",
     "build:frontend": "yarn workspace @blogify/frontend build",
+    "build:docs": "yarn workspace documentation build",
     "lint": "yarn workspaces run lint"
   },
   "keywords": [
