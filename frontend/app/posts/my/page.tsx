@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { useMyPosts } from "@/lib/hooks/useMyPosts";
 import { Button } from "@/components/ui/button";
@@ -118,9 +119,11 @@ export default function MyPostsPage() {
                 {post.mediaUrl && (
                   <div className="w-full overflow-hidden">
                     {post.mediaType?.startsWith("image") ? (
-                      <img
+                      <Image
                         src={post.mediaUrl}
                         alt={post.title}
+                        width={400}
+                        height={192}
                         className="w-full h-48 object-cover"
                       />
                     ) : post.mediaType?.startsWith("video") ? (

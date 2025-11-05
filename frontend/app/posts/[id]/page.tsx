@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { usePost } from "@/lib/hooks/usePost";
 import { Button } from "@/components/ui/button";
@@ -115,9 +116,11 @@ export default function PostDetailPage() {
         {post.mediaUrl && (
           <div className="mb-6 rounded-lg overflow-hidden">
             {post.mediaType?.startsWith("image") ? (
-              <img
+              <Image
                 src={post.mediaUrl}
                 alt={post.title}
+                width={1200}
+                height={384}
                 className="w-full max-h-96 object-cover"
               />
             ) : post.mediaType?.startsWith("video") ? (

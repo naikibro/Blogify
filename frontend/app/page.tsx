@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth";
 import { usePosts } from "@/lib/hooks/usePosts";
 import { LogIn, LogOut, Plus, Shield } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect } from "react";
 
 export default function Home() {
@@ -111,9 +112,11 @@ export default function Home() {
                 {post.mediaUrl && (
                   <div className="w-full overflow-hidden">
                     {post.mediaType?.startsWith("image") ? (
-                      <img
+                      <Image
                         src={post.mediaUrl}
                         alt={post.title}
+                        width={400}
+                        height={192}
                         className="w-full h-48 object-cover"
                       />
                     ) : post.mediaType?.startsWith("video") ? (
