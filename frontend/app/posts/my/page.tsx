@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { postsApi, BlogPost } from "@/lib/api";
+import { useMyPosts } from "@/lib/hooks/useMyPosts";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,37 +18,28 @@ import { ArrowLeft, Plus, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function MyPostsPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const router = useRouter();
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showUnpublished, setShowUnpublished] = useState(true);
   const { toast } = useToast();
+  const { filteredPosts, loading, error, showUnpublished, setShowUnpublished } =
+    useMyPosts();
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push("/login");
       return;
     }
-    loadPosts();
   }, [isAuthenticated, router]);
 
-  const loadPosts = async () => {
-    if (!user?.id) return;
-    try {
-      setLoading(true);
-      const response = await postsApi.list(undefined, user.id);
-      setPosts(response.posts);
-    } catch (error: any) {
+  useEffect(() => {
+    if (error) {
       toast({
         title: "Error",
         description: error.message || "Failed to load posts",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
   const formatDate = (timestamp: number | string) => {
     const numTimestamp =
@@ -59,10 +50,6 @@ export default function MyPostsPage() {
       day: "numeric",
     });
   };
-
-  const filteredPosts = showUnpublished
-    ? posts
-    : posts.filter((post) => post.published);
 
   if (!isAuthenticated) {
     return null;

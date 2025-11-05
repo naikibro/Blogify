@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/lib/auth";
+import { useAuthForm } from "@/lib/hooks/useAuthForm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/use-toast";
 import {
   Select,
   SelectContent,
@@ -28,30 +26,11 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("guest_author");
-  const [loading, setLoading] = useState(false);
-  const { register } = useAuth();
-  const router = useRouter();
-  const { toast } = useToast();
+  const { loading, handleRegister } = useAuthForm();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setLoading(true);
-      await register(email, password, role);
-      toast({
-        title: "Success",
-        description: "Account created successfully",
-      });
-      router.push("/");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Registration failed",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    await handleRegister(email, password, role);
   };
 
   return (

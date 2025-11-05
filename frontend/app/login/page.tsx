@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/lib/auth";
+import { useAuthForm } from "@/lib/hooks/useAuthForm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,35 +14,15 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/use-toast";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const router = useRouter();
-  const { toast } = useToast();
+  const { loading, handleLogin } = useAuthForm();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setLoading(true);
-      await login(email, password);
-      toast({
-        title: "Success",
-        description: "Logged in successfully",
-      });
-      router.push("/");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Login failed",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    await handleLogin(email, password);
   };
 
   return (

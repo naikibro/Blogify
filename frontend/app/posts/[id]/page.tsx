@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { postsApi, BlogPost } from "@/lib/api";
+import { usePost } from "@/lib/hooks/usePost";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
+import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Edit, Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -20,57 +19,16 @@ import {
 
 export default function PostDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { user, isAuthenticated } = useAuth();
-  const [post, setPost] = useState<BlogPost | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { post, loading, deletePost, deleting } = usePost({
+    postId: params.id as string,
+  });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (params.id) {
-      loadPost(params.id as string);
-    }
-  }, [params.id]);
-
-  const loadPost = async (id: string) => {
-    try {
-      setLoading(true);
-      const data = await postsApi.get(id);
-      setPost(data);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to load post",
-        variant: "destructive",
-      });
-      router.push("/");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!post) return;
-    try {
-      setDeleting(true);
-      await postsApi.delete(post.id);
-      toast({
-        title: "Success",
-        description: "Post deleted successfully",
-      });
-      router.push("/");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete post",
-        variant: "destructive",
-      });
-    } finally {
-      setDeleting(false);
-      setDeleteDialogOpen(false);
-    }
+    await deletePost(post.id);
+    setDeleteDialogOpen(false);
   };
 
   const formatDate = (timestamp: number | string) => {

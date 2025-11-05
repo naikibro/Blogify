@@ -27,3 +27,6 @@ function getEnv() {
 }
 
 export const config = getEnv();
+
+// Export API base URL for convenience
+export const API_BASE_URL = config.NEXT_PUBLIC_API_URL;

@@ -1,125 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { postsApi, mediaApi, CreatePostRequest } from "@/lib/api";
+import { usePostForm } from "@/lib/hooks/usePostForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, X } from "lucide-react";
 
 export default function NewPostPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<CreatePostRequest>({
-    title: "",
-    content: "",
-    published: false,
-    tags: [],
-    excerpt: "",
-  });
-  const [tagInput, setTagInput] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const {
+    formData,
+    setFormData,
+    tagInput,
+    setTagInput,
+    mediaPreview,
+    uploading,
+    saving,
+    addTag,
+    removeTag,
+    handleMediaUpload,
+    removeMedia,
+    handleSubmit,
+  } = usePostForm();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, router]);
 
   if (!isAuthenticated) {
-    router.push("/login");
     return null;
   }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-      const post = await postsApi.create(formData);
-      toast({
-        title: "Success",
-        description: "Post created successfully",
-      });
-      router.push(`/posts/${post.id}`);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create post",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const addTag = () => {
-    if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {
-      setFormData({
-        ...formData,
-        tags: [...(formData.tags || []), tagInput.trim()],
-      });
-      setTagInput("");
-    }
-  };
-
-  const removeTag = (tag: string) => {
-    setFormData({
-      ...formData,
-      tags: formData.tags?.filter((t) => t !== tag) || [],
-    });
-  };
-
-  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-    if (!isImage && !isVideo) {
-      toast({
-        title: "Error",
-        description: "Please upload an image or video file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setUploading(true);
-      const { mediaUrl, mediaType } = await mediaApi.upload(file);
-
-      setFormData({
-        ...formData,
-        mediaUrl,
-        mediaType,
-      });
-      setMediaPreview(mediaUrl);
-      toast({
-        title: "Success",
-        description: "Media uploaded successfully",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to upload media",
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeMedia = () => {
-    setFormData({
-      ...formData,
-      mediaUrl: undefined,
-      mediaType: undefined,
-    });
-    setMediaPreview(null);
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -280,8 +199,8 @@ export default function NewPostPage() {
               </div>
 
               <div className="flex gap-4">
-                <Button type="submit" disabled={loading}>
-                  {loading ? "Creating..." : "Create Post"}
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Creating..." : "Create Post"}
                 </Button>
                 <Link href="/">
                   <Button type="button" variant="outline">

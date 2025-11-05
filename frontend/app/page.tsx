@@ -1,9 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useAuth } from "@/lib/auth";
-import { postsApi, BlogPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,34 +10,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, LogOut, LogIn, Shield } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { usePosts } from "@/lib/hooks/usePosts";
+import { LogIn, LogOut, Plus, Shield } from "lucide-react";
+import Link from "next/link";
+import { useEffect } from "react";
 
 export default function Home() {
   const { user, logout, isAuthenticated } = useAuth();
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { posts, loading, error } = usePosts({ published: true });
   const { toast } = useToast();
 
   useEffect(() => {
-    loadPosts();
-  }, []);
-
-  const loadPosts = async () => {
-    try {
-      setLoading(true);
-      const response = await postsApi.list(true); // Only published posts
-      console.log(JSON.stringify(response, null, 2));
-      setPosts(response.posts);
-    } catch (error: any) {
+    if (error) {
       toast({
         title: "Error",
         description: error.message || "Failed to load posts",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
   const formatDate = (timestamp: number | string) => {
     const numTimestamp =
