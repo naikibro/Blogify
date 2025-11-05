@@ -8,10 +8,18 @@ import {
   DeleteCommand,
   ScanCommand,
   QueryCommand,
+  QueryCommandInput,
+  ScanCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { success, error } from "../utils/response";
 import { getAuthUser } from "../utils/auth";
 import { CreatePostRequest, UpdatePostRequest, BlogPost } from "../types";
+import { validateCreatePost, validateUpdatePost } from "../utils/validation";
+import {
+  canEditPost,
+  canDeletePost,
+  canPublishPost,
+} from "../utils/authorization";
 
 const POSTS_TABLE = process.env.POSTS_TABLE || "";
 
@@ -35,8 +43,24 @@ export const create = async (
       mediaType,
     } = body;
 
-    if (!title || !content) {
-      return error("Title and content are required", 400);
+    // Validate input
+    const validationErrors = validateCreatePost(body);
+    if (validationErrors.length > 0) {
+      return error(
+        {
+          message: "Validation failed",
+          errors: validationErrors,
+        },
+        400
+      );
+    }
+
+    // Check if user can publish posts
+    if (published && !canPublishPost(user)) {
+      return error(
+        "You do not have permission to publish posts. Only admins and editors can publish.",
+        403
+      );
     }
 
     const id = uuidv4();
@@ -49,6 +73,7 @@ export const create = async (
       authorId: user.userId,
       authorEmail: user.email,
       published,
+      publishedStatus: published ? "true" : "false", // For GSI
       createdAt: now,
       updatedAt: now,
       tags: tags || [],
@@ -65,8 +90,10 @@ export const create = async (
     );
 
     return success(post, 201);
-  } catch (err: any) {
-    return error(err.message || "Failed to create post", 500);
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to create post";
+    return error(errorMessage, 500);
   }
 };
 
@@ -91,8 +118,10 @@ export const get = async (
     }
 
     return success(result.Item as BlogPost);
-  } catch (err: any) {
-    return error(err.message || "Failed to get post", 500);
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to get post";
+    return error(errorMessage, 500);
   }
 };
 
@@ -103,36 +132,127 @@ export const list = async (
     const published = event.queryStringParameters?.published;
     const authorId = event.queryStringParameters?.authorId;
 
+    // Pagination parameters
+    const limit = Math.min(
+      parseInt(event.queryStringParameters?.limit || "20", 10),
+      100
+    ); // Max 100 items per page
+    const lastKey = event.queryStringParameters?.lastKey; // Cursor for pagination
+
     let result;
+    let posts: BlogPost[] = [];
+
     if (authorId) {
-      result = await dynamoClient.send(
-        new QueryCommand({
-          TableName: POSTS_TABLE,
-          IndexName: "authorId-createdAt-index",
-          KeyConditionExpression: "authorId = :authorId",
-          ExpressionAttributeValues: { ":authorId": authorId },
-          ScanIndexForward: false,
-        })
-      );
+      // Query by author using GSI
+      const queryParams: QueryCommandInput = {
+        TableName: POSTS_TABLE,
+        IndexName: "authorId-createdAt-index",
+        KeyConditionExpression: "authorId = :authorId",
+        ExpressionAttributeValues: { ":authorId": authorId },
+        ScanIndexForward: false,
+        Limit: limit,
+      };
+
+      // Add FilterExpression for published status if specified
+      if (published === "true" || published === "false") {
+        queryParams.FilterExpression = "published = :published";
+        queryParams.ExpressionAttributeValues = {
+          ...queryParams.ExpressionAttributeValues,
+          ":published": published === "true",
+        };
+      }
+
+      // Add pagination cursor
+      if (lastKey) {
+        try {
+          queryParams.ExclusiveStartKey = JSON.parse(
+            Buffer.from(lastKey, "base64").toString()
+          );
+        } catch {
+          // Invalid cursor, ignore
+        }
+      }
+
+      result = await dynamoClient.send(new QueryCommand(queryParams));
+      posts = (result.Items || []) as BlogPost[];
+    } else if (published === "true" || published === "false") {
+      // Use published GSI for efficient filtering
+      const queryParams: QueryCommandInput = {
+        TableName: POSTS_TABLE,
+        IndexName: "published-createdAt-index",
+        KeyConditionExpression: "publishedStatus = :publishedStatus",
+        ExpressionAttributeValues: {
+          ":publishedStatus": published === "true" ? "true" : "false",
+        },
+        ScanIndexForward: false,
+        Limit: limit,
+      };
+
+      // Add pagination cursor
+      if (lastKey) {
+        try {
+          queryParams.ExclusiveStartKey = JSON.parse(
+            Buffer.from(lastKey, "base64").toString()
+          );
+        } catch {
+          // Invalid cursor, ignore
+        }
+      }
+
+      result = await dynamoClient.send(new QueryCommand(queryParams));
+      posts = (result.Items || []) as BlogPost[];
     } else {
-      result = await dynamoClient.send(
-        new ScanCommand({
-          TableName: POSTS_TABLE,
-        })
-      );
+      // Scan all posts (use sparingly)
+      const scanParams: ScanCommandInput = {
+        TableName: POSTS_TABLE,
+        Limit: limit,
+      };
+
+      // Add pagination cursor
+      if (lastKey) {
+        try {
+          scanParams.ExclusiveStartKey = JSON.parse(
+            Buffer.from(lastKey, "base64").toString()
+          );
+        } catch {
+          // Invalid cursor, ignore
+        }
+      }
+
+      result = await dynamoClient.send(new ScanCommand(scanParams));
+      posts = (result.Items || []) as BlogPost[];
+
+      // Sort by createdAt descending
+      posts.sort((a, b) => b.createdAt - a.createdAt);
     }
 
-    let posts = (result.Items || []) as BlogPost[];
+    // Build response with pagination info
+    const response: {
+      posts: BlogPost[];
+      count: number;
+      hasMore: boolean;
+      lastKey?: string;
+    } = {
+      posts,
+      count: posts.length,
+      hasMore: false,
+    };
 
-    if (published === "true") {
-      posts = posts.filter((post) => post.published);
+    // Add pagination cursor if there are more items
+    if (result.LastEvaluatedKey) {
+      response.lastKey = Buffer.from(
+        JSON.stringify(result.LastEvaluatedKey)
+      ).toString("base64");
+      response.hasMore = true;
+    } else {
+      response.hasMore = false;
     }
 
-    posts.sort((a, b) => b.createdAt - a.createdAt);
-
-    return success({ posts, count: posts.length });
-  } catch (err: any) {
-    return error(err.message || "Failed to list posts", 500);
+    return success(response);
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to list posts";
+    return error(errorMessage, 500);
   }
 };
 
@@ -163,12 +283,30 @@ export const update = async (
     }
 
     const post = existing.Item as BlogPost;
-    if (post.authorId !== user.userId && user.role !== "admin") {
-      return error("Forbidden", 403);
+
+    // Check authorization using utility
+    if (!canEditPost(user, post)) {
+      return error(
+        "Forbidden: You do not have permission to edit this post",
+        403
+      );
     }
 
     const body: UpdatePostRequest = JSON.parse(event.body || "{}");
-    const updates: any = { updatedAt: Date.now() };
+
+    // Validate input
+    const validationErrors = validateUpdatePost(body);
+    if (validationErrors.length > 0) {
+      return error(
+        {
+          message: "Validation failed",
+          errors: validationErrors,
+        },
+        400
+      );
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: Date.now() };
 
     if (body.title !== undefined) updates.title = body.title;
     if (body.content !== undefined) {
@@ -177,7 +315,17 @@ export const update = async (
         updates.excerpt = body.content.substring(0, 200);
       }
     }
-    if (body.published !== undefined) updates.published = body.published;
+    if (body.published !== undefined) {
+      // Check if user can publish posts
+      if (body.published && !canPublishPost(user)) {
+        return error(
+          "You do not have permission to publish posts. Only admins and editors can publish.",
+          403
+        );
+      }
+      updates.published = body.published;
+      updates.publishedStatus = body.published ? "true" : "false"; // Update GSI field
+    }
     if (body.tags !== undefined) updates.tags = body.tags;
     if (body.excerpt !== undefined) updates.excerpt = body.excerpt;
     if (body.mediaUrl !== undefined) updates.mediaUrl = body.mediaUrl;
@@ -192,7 +340,7 @@ export const update = async (
         acc[`:val${index}`] = updates[key];
         return acc;
       },
-      {} as Record<string, any>
+      {} as Record<string, unknown>
     );
 
     await dynamoClient.send(
@@ -213,8 +361,10 @@ export const update = async (
     );
 
     return success(updated.Item as BlogPost);
-  } catch (err: any) {
-    return error(err.message || "Failed to update post", 500);
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to update post";
+    return error(errorMessage, 500);
   }
 };
 
@@ -245,8 +395,13 @@ export const deletePost = async (
     }
 
     const post = existing.Item as BlogPost;
-    if (post.authorId !== user.userId && user.role !== "admin") {
-      return error("Forbidden", 403);
+
+    // Check authorization using utility
+    if (!canDeletePost(user, post)) {
+      return error(
+        "Forbidden: You do not have permission to delete this post",
+        403
+      );
     }
 
     await dynamoClient.send(
@@ -257,7 +412,9 @@ export const deletePost = async (
     );
 
     return success({ message: "Post deleted successfully" });
-  } catch (err: any) {
-    return error(err.message || "Failed to delete post", 500);
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to delete post";
+    return error(errorMessage, 500);
   }
 };

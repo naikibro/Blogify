@@ -20,6 +20,7 @@ export interface BlogPost {
   authorId: string;
   authorEmail?: string;
   published: boolean;
+  publishedStatus?: string; // String version for GSI: "true" or "false"
   createdAt: number;
   updatedAt: number;
   tags?: string[];
@@ -37,7 +38,7 @@ export interface MediaItem {
   uploadedBy: string;
 }
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   statusCode: number;
   body: T;
   headers?: Record<string, string>;

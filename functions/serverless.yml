@@ -59,6 +59,8 @@ provider:
       - multipart/form-data
       - image/*
       - video/*
+    shouldStartNameWithService: true
+    metrics: true
 
 plugins:
   - serverless-offline
@@ -255,6 +257,12 @@ custom:
                     type: string
             count:
               type: number
+            hasMore:
+              type: boolean
+              description: "Whether there are more posts available"
+            lastKey:
+              type: string
+              description: "Cursor for pagination (base64 encoded)"
 
       - name: MediaUploadRequest
         description: "Media upload request"
@@ -467,7 +475,7 @@ functions:
           cors: true
           documentation:
             summary: List all blog posts
-            description: Retrieves a list of blog posts. Supports filtering by published status and author.
+            description: Retrieves a list of blog posts. Supports filtering by published status and author. Supports pagination.
             queryParams:
               - name: published
                 description: Filter by published status (true/false)
@@ -477,6 +485,18 @@ functions:
                   enum: ["true", "false"]
               - name: authorId
                 description: Filter posts by author ID
+                required: false
+                schema:
+                  type: string
+              - name: limit
+                description: "Maximum number of posts to return (default: 20, max: 100)"
+                required: false
+                schema:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+              - name: lastKey
+                description: Cursor for pagination (base64 encoded lastEvaluatedKey from previous response)
                 required: false
                 schema:
                   type: string
@@ -706,6 +726,8 @@ resources:
             AttributeType: S
           - AttributeName: createdAt
             AttributeType: N
+          - AttributeName: published
+            AttributeType: S
         KeySchema:
           - AttributeName: id
             KeyType: HASH
@@ -718,15 +740,23 @@ resources:
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
+          - IndexName: published-createdAt-index
+            KeySchema:
+              - AttributeName: published
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
 
     MediaBucket:
       Type: AWS::S3::Bucket
       Properties:
         PublicAccessBlockConfiguration:
-          BlockPublicAcls: false
-          BlockPublicPolicy: false
-          IgnorePublicAcls: false
-          RestrictPublicBuckets: false
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders:
@@ -747,6 +777,10 @@ resources:
               MaxAge: 3000
         VersioningConfiguration:
           Status: Enabled
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
 
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
@@ -783,35 +817,6 @@ resources:
           - ALLOW_USER_PASSWORD_AUTH
           - ALLOW_REFRESH_TOKEN_AUTH
         PreventUserExistenceErrors: ENABLED
-
-    MediaBucketPolicy:
-      Type: AWS::S3::BucketPolicy
-      Properties:
-        Bucket:
-          Ref: MediaBucket
-        PolicyDocument:
-          Statement:
-            - Sid: PublicReadGetObject
-              Effect: Allow
-              Principal: "*"
-              Action: s3:GetObject
-              Resource:
-                Fn::Join:
-                  - ""
-                  - - "arn:aws:s3:::"
-                    - Ref: MediaBucket
-                    - "/*"
-            - Sid: AllowCORS
-              Effect: Allow
-              Principal: "*"
-              Action:
-                - s3:PutObject
-              Resource:
-                Fn::Join:
-                  - ""
-                  - - "arn:aws:s3:::"
-                    - Ref: MediaBucket
-                    - "/*"
 
   Outputs:
     UserPoolId:

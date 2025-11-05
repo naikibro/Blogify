@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getPresignedUploadUrl, getPresignedDownloadUrl } from "../utils/s3";
 import { success, error } from "../utils/response";
 import { getAuthUser } from "../utils/auth";
+import { validateMediaUpload } from "../utils/validation";
 
 export const upload = async (
   event: APIGatewayProxyEvent
@@ -15,10 +16,22 @@ export const upload = async (
 
     // Parse request body
     const body = JSON.parse(event.body || "{}");
-    const { fileName, contentType } = body;
+    const { fileName, contentType, fileSize } = body;
 
-    if (!fileName || !contentType) {
-      return error("fileName and contentType are required", 400);
+    // Validate input
+    const validationErrors = validateMediaUpload(
+      fileName,
+      contentType,
+      fileSize
+    );
+    if (validationErrors.length > 0) {
+      return error(
+        {
+          message: "Validation failed",
+          errors: validationErrors,
+        },
+        400
+      );
     }
 
     // Generate unique S3 key
