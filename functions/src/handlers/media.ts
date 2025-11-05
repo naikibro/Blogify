@@ -1,9 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { v4 as uuidv4 } from "uuid";
-import { getPresignedUploadUrl, getPresignedDownloadUrl } from "../utils/s3";
 import { success, error } from "../utils/response";
 import { getAuthUser } from "../utils/auth";
 import { validateMediaUpload } from "../utils/validation";
+import { MediaService } from "../services/MediaService";
+
+const mediaService = new MediaService();
 
 export const upload = async (
   event: APIGatewayProxyEvent
@@ -34,20 +35,12 @@ export const upload = async (
       );
     }
 
-    // Generate unique S3 key
-    const extension = fileName.split(".").pop() || "";
-    const key = `media/${user.userId}/${uuidv4()}.${extension}`;
+    const result = await mediaService.generateUploadUrls(
+      { fileName, contentType, fileSize },
+      user
+    );
 
-    // Generate presigned URLs
-    const uploadUrl = await getPresignedUploadUrl(key, contentType);
-    const downloadUrl = await getPresignedDownloadUrl(key);
-
-    return success({
-      uploadUrl,
-      mediaUrl: downloadUrl,
-      key,
-      expiresIn: 3600,
-    });
+    return success(result);
   } catch (err: unknown) {
     const errorMessage =
       err instanceof Error ? err.message : "Failed to upload media";
@@ -65,7 +58,7 @@ export const get = async (
       return error("Media key is required", 400);
     }
 
-    const downloadUrl = await getPresignedDownloadUrl(key);
+    const result = await mediaService.generateDownloadUrl(key);
 
     // Check if this is a direct media request (from browser) or API request
     const acceptHeader = event.headers.Accept || "";
@@ -79,7 +72,7 @@ export const get = async (
       return {
         statusCode: 302,
         headers: {
-          Location: downloadUrl,
+          Location: result.downloadUrl,
           "Access-Control-Allow-Origin": "*",
         },
         body: "",
@@ -87,10 +80,7 @@ export const get = async (
     }
 
     // Return JSON for API requests
-    return success({
-      downloadUrl,
-      expiresIn: 3600,
-    });
+    return success(result);
   } catch (err: unknown) {
     const errorMessage =
       err instanceof Error ? err.message : "Failed to generate download URL";
