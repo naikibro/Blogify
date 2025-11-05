@@ -29,8 +29,11 @@ export class MediaService {
     user: CognitoUser
   ): Promise<MediaUploadResponse> {
     // Generate unique S3 key
-    const extension = request.fileName.split(".").pop() || "";
-    const key = `media/${user.userId}/${uuidv4()}.${extension}`;
+    const extension = this.getFileExtension(request.fileName);
+    const uuid = uuidv4();
+    const key = extension
+      ? `media/${user.userId}/${uuid}.${extension}`
+      : `media/${user.userId}/${uuid}`;
 
     // Generate presigned URLs
     const uploadUrl = await getPresignedUploadUrl(key, request.contentType);
@@ -60,6 +63,11 @@ export class MediaService {
    * Extract file extension from filename
    */
   getFileExtension(fileName: string): string {
-    return fileName.split(".").pop() || "";
+    const parts = fileName.split(".");
+    // If there's no dot or only one part (no extension), return empty string
+    if (parts.length <= 1) {
+      return "";
+    }
+    return parts.pop() || "";
   }
 }
