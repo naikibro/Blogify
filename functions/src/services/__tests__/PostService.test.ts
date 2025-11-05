@@ -46,7 +46,7 @@ describe("PostService", () => {
               content: mockPostRequest.content,
               authorId: mockUser.userId,
               authorEmail: mockUser.email,
-              published: false,
+              published: "false", // Stored as string for GSI compatibility
               publishedStatus: "false",
             }),
           }),
@@ -119,23 +119,29 @@ describe("PostService", () => {
 
   describe("getPostById", () => {
     it("should return a post when found", async () => {
-      const mockPost: BlogPost = {
+      // DynamoDB stores published as string
+      const mockDynamoPost = {
         id: "post-123",
         title: "Test Post",
         content: "Content",
         authorId: "user-123",
-        published: false,
+        published: "false", // Stored as string in DynamoDB
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
 
+      const expectedPost: BlogPost = {
+        ...mockDynamoPost,
+        published: false, // Converted to boolean for API
+      };
+
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Item: mockPost,
+        Item: mockDynamoPost,
       });
 
       const result = await postService.getPostById("post-123");
 
-      expect(result).toEqual(mockPost);
+      expect(result).toEqual(expectedPost);
       expect(dynamoClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
@@ -164,13 +170,14 @@ describe("PostService", () => {
   });
 
   describe("listPosts", () => {
-    const mockPosts: BlogPost[] = [
+    // DynamoDB returns published as string, but API converts to boolean
+    const mockDynamoPosts = [
       {
         id: "post-1",
         title: "Post 1",
         content: "Content 1",
         authorId: "user-123",
-        published: true,
+        published: "true", // Stored as string in DynamoDB
         createdAt: 1000,
         updatedAt: 1000,
       },
@@ -179,15 +186,16 @@ describe("PostService", () => {
         title: "Post 2",
         content: "Content 2",
         authorId: "user-123",
-        published: false,
+        published: "false", // Stored as string in DynamoDB
         createdAt: 2000,
         updatedAt: 2000,
       },
     ];
+    // `mockPosts` was declared but not used, so it's removed to satisfy the linter.
 
     it("should list posts by author", async () => {
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: mockPosts,
+        Items: mockDynamoPosts, // DynamoDB returns strings
       });
 
       const result = await postService.listPosts({
@@ -196,13 +204,19 @@ describe("PostService", () => {
       });
 
       expect(result.posts).toHaveLength(2);
+      // Verify both posts are present with correct published values (order may vary)
+      const publishedValues = result.posts.map((p) => p.published);
+      expect(publishedValues).toContain(true);
+      expect(publishedValues).toContain(false);
       expect(dynamoClient.send).toHaveBeenCalledWith(expect.any(QueryCommand));
     });
 
     it("should list published posts using GSI", async () => {
-      const publishedPosts = mockPosts.filter((p) => p.published);
+      const publishedDynamoPosts = mockDynamoPosts.filter(
+        (p) => p.published === "true"
+      );
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: publishedPosts,
+        Items: publishedDynamoPosts, // DynamoDB returns strings
       });
 
       const result = await postService.listPosts({
@@ -211,12 +225,12 @@ describe("PostService", () => {
       });
 
       expect(result.posts).toHaveLength(1);
-      expect(result.posts[0].published).toBe(true);
+      expect(result.posts[0].published).toBe(true); // Converted to boolean
     });
 
     it("should handle pagination with lastKey", async () => {
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: mockPosts,
+        Items: mockDynamoPosts, // DynamoDB returns strings
         LastEvaluatedKey: { id: "post-2", createdAt: 2000 },
       });
 
@@ -233,18 +247,21 @@ describe("PostService", () => {
 
     it("should scan all posts when no filters provided", async () => {
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: mockPosts,
+        Items: mockDynamoPosts, // DynamoDB returns strings
       });
 
       const result = await postService.listPosts({ limit: 20 });
 
       expect(result.posts).toHaveLength(2);
+      // Posts are sorted by createdAt descending, so post-2 (2000) comes before post-1 (1000)
+      expect(result.posts[0].published).toBe(false); // post-2 has createdAt: 2000
+      expect(result.posts[1].published).toBe(true); // post-1 has createdAt: 1000
       expect(dynamoClient.send).toHaveBeenCalledWith(expect.any(ScanCommand));
     });
 
     it("should respect limit parameter", async () => {
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: mockPosts.slice(0, 1),
+        Items: mockDynamoPosts.slice(0, 1), // DynamoDB returns strings
       });
 
       const result = await postService.listPosts({ limit: 1 });
@@ -254,7 +271,7 @@ describe("PostService", () => {
 
     it("should cap limit at 100", async () => {
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: mockPosts,
+        Items: mockDynamoPosts, // DynamoDB returns strings
       });
 
       await postService.listPosts({ limit: 200 });
@@ -265,7 +282,7 @@ describe("PostService", () => {
 
     it("should handle invalid lastKey gracefully", async () => {
       (dynamoClient.send as jest.Mock).mockResolvedValue({
-        Items: mockPosts,
+        Items: mockDynamoPosts, // DynamoDB returns strings
       });
 
       const result = await postService.listPosts({
@@ -278,14 +295,20 @@ describe("PostService", () => {
   });
 
   describe("updatePost", () => {
-    const existingPost: BlogPost = {
+    // DynamoDB stores published as string
+    const existingDynamoPost = {
       id: "post-123",
       title: "Original Title",
       content: "Original content",
       authorId: "user-123",
-      published: false,
+      published: "false", // Stored as string in DynamoDB
       createdAt: 1000,
       updatedAt: 1000,
+    };
+
+    const existingPost: BlogPost = {
+      ...existingDynamoPost,
+      published: false, // Converted to boolean for API
     };
 
     it("should update post successfully", async () => {
@@ -294,9 +317,15 @@ describe("PostService", () => {
         content: "Updated content",
       };
 
+      const updatedDynamoPost = {
+        ...existingDynamoPost,
+        ...updates,
+        published: existingDynamoPost.published, // Keep as string for DynamoDB
+      };
+
       (dynamoClient.send as jest.Mock)
         .mockResolvedValueOnce({}) // Update command
-        .mockResolvedValueOnce({ Item: { ...existingPost, ...updates } }); // Get command
+        .mockResolvedValueOnce({ Item: updatedDynamoPost }); // Get command
 
       const result = await postService.updatePost("post-123", updates);
 
@@ -309,15 +338,21 @@ describe("PostService", () => {
         published: true,
       };
 
+      const updatedDynamoPost = {
+        ...existingDynamoPost,
+        published: "true", // Stored as string in DynamoDB
+        publishedStatus: "true",
+      };
+
       (dynamoClient.send as jest.Mock)
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({
-          Item: { ...existingPost, published: true, publishedStatus: "true" },
+          Item: updatedDynamoPost,
         });
 
       const result = await postService.updatePost("post-123", updates);
 
-      expect(result.published).toBe(true);
+      expect(result.published).toBe(true); // Converted to boolean
       expect(result.publishedStatus).toBe("true");
     });
 
@@ -332,7 +367,7 @@ describe("PostService", () => {
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({
           Item: {
-            ...existingPost,
+            ...existingDynamoPost,
             content: newContent,
             excerpt: newContent.substring(0, 200),
           },
@@ -352,7 +387,7 @@ describe("PostService", () => {
       (dynamoClient.send as jest.Mock)
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({
-          Item: { ...existingPost, ...updates },
+          Item: { ...existingDynamoPost, ...updates },
         });
 
       const result = await postService.updatePost("post-123", updates);
@@ -380,7 +415,7 @@ describe("PostService", () => {
       (dynamoClient.send as jest.Mock)
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({
-          Item: { ...existingPost, tags: updates.tags },
+          Item: { ...existingDynamoPost, tags: updates.tags },
         });
 
       const result = await postService.updatePost("post-123", updates);

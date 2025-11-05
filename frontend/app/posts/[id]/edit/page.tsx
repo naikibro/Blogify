@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { postsApi, mediaApi, BlogPost, UpdatePostRequest } from "@/lib/api";
+import { usePost } from "@/lib/hooks/usePost";
+import { usePostForm } from "@/lib/hooks/usePostForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,158 +18,49 @@ export default function EditPostPage() {
   const params = useParams();
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [post, setPost] = useState<BlogPost | null>(null);
-  const [formData, setFormData] = useState<UpdatePostRequest>({
-    title: "",
-    content: "",
-    published: false,
-    tags: [],
-    excerpt: "",
-  });
-  const [tagInput, setTagInput] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const { toast } = useToast();
+  const { post, loading } = usePost({
+    postId: params.id as string,
+  });
+  const {
+    formData,
+    setFormData,
+    tagInput,
+    setTagInput,
+    mediaPreview,
+    uploading,
+    saving,
+    addTag,
+    removeTag,
+    handleMediaUpload,
+    removeMedia,
+    handleSubmit,
+  } = usePostForm({
+    initialData: post || undefined,
+  });
 
   useEffect(() => {
-    if (params.id && isAuthenticated) {
-      loadPost(params.id as string);
-    } else if (!isAuthenticated) {
+    if (!isAuthenticated) {
       router.push("/login");
+      return;
     }
-  }, [params.id, isAuthenticated]);
+  }, [isAuthenticated, router]);
 
-  const loadPost = async (id: string) => {
-    try {
-      setLoading(true);
-      const data = await postsApi.get(id);
-
+  useEffect(() => {
+    if (post) {
       // Check if user can edit
-      if (data.authorId !== user?.id && user?.role !== "admin") {
+      if (post.authorId !== user?.id && user?.role !== "admin") {
         toast({
           title: "Error",
           description: "You do not have permission to edit this post",
           variant: "destructive",
         });
-        router.push(`/posts/${id}`);
-        return;
+        router.push(`/posts/${post.id}`);
       }
-
-      setPost(data);
-      setFormData({
-        title: data.title,
-        content: data.content,
-        published: data.published,
-        tags: data.tags || [],
-        excerpt: data.excerpt || "",
-        mediaUrl: data.mediaUrl || "",
-        mediaType: data.mediaType || "",
-      });
-      setMediaPreview(data.mediaUrl || null);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to load post",
-        variant: "destructive",
-      });
-      router.push("/");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [post, user, router, toast]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!post) return;
-
-    try {
-      setSaving(true);
-      const updated = await postsApi.update(post.id, formData);
-      toast({
-        title: "Success",
-        description: "Post updated successfully",
-      });
-      router.push(`/posts/${updated.id}`);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update post",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addTag = () => {
-    if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {
-      setFormData({
-        ...formData,
-        tags: [...(formData.tags || []), tagInput.trim()],
-      });
-      setTagInput("");
-    }
-  };
-
-  const removeTag = (tag: string) => {
-    setFormData({
-      ...formData,
-      tags: formData.tags?.filter((t) => t !== tag) || [],
-    });
-  };
-
-  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-    if (!isImage && !isVideo) {
-      toast({
-        title: "Error",
-        description: "Please upload an image or video file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setUploading(true);
-      const { mediaUrl, mediaType } = await mediaApi.upload(file);
-
-      setFormData({
-        ...formData,
-        mediaUrl,
-        mediaType,
-      });
-      setMediaPreview(mediaUrl);
-      toast({
-        title: "Success",
-        description: "Media uploaded successfully",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to upload media",
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeMedia = () => {
-    setFormData({
-      ...formData,
-      mediaUrl: undefined,
-      mediaType: undefined,
-    });
-    setMediaPreview(null);
-  };
-
-  if (loading) {
+  if (loading || !post) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div>Loading...</div>
@@ -176,7 +68,7 @@ export default function EditPostPage() {
     );
   }
 
-  if (!post) {
+  if (post.authorId !== user?.id && user?.role !== "admin") {
     return null;
   }
 

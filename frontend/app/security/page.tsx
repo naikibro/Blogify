@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { securityApi, SecurityMetrics, VirusDetection } from "@/lib/api";
+import { useSecurity } from "@/lib/hooks/useSecurity";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,7 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
 import {
   ArrowLeft,
   Shield,
@@ -21,17 +20,16 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function SecurityDashboardPage() {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
-  const [metrics, setMetrics] = useState<SecurityMetrics | null>(null);
-  const [detections, setDetections] = useState<VirusDetection[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const { metrics, detections, loading, error } = useSecurity();
   const [activeTab, setActiveTab] = useState<"overview" | "detections">(
     "overview"
   );
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -48,29 +46,17 @@ export default function SecurityDashboardPage() {
       router.push("/");
       return;
     }
+  }, [isAuthenticated, user, router, toast]);
 
-    loadData();
-  }, [isAuthenticated, user, router]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [metricsData, detectionsData] = await Promise.all([
-        securityApi.getDashboard(),
-        securityApi.getDetections(),
-      ]);
-      setMetrics(metricsData);
-      setDetections(detectionsData.detections);
-    } catch (error: any) {
+  useEffect(() => {
+    if (error) {
       toast({
         title: "Error",
         description: error.message || "Failed to load security data",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString("en-US", {
