@@ -206,6 +206,13 @@ paths:
       description: >-
         Creates a new user account in Cognito and stores user metadata in
         DynamoDB
+      requestBody:
+        required: true
+        description: User registration data
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
       responses:
         "201":
           description: User created successfully
@@ -236,6 +243,13 @@ paths:
       operationId: login
       summary: Login user
       description: Authenticates user credentials and returns Cognito tokens
+      requestBody:
+        required: true
+        description: User login credentials
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
       responses:
         "200":
           description: Login successful
@@ -266,6 +280,13 @@ paths:
       operationId: createPost
       summary: Create a new blog post
       description: Creates a new blog post. Requires authentication with Cognito ID token.
+      requestBody:
+        required: true
+        description: Blog post data
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostRequest"
       responses:
         "201":
           description: Post created successfully
@@ -362,6 +383,13 @@ paths:
           description: The ID of the blog post to update
           schema:
             type: string
+      requestBody:
+        required: true
+        description: Updated post data (all fields optional)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePostRequest"
       responses:
         "200":
           description: Post updated successfully
@@ -450,6 +478,13 @@ paths:
       description: >-
         Generates a presigned S3 URL for uploading media files. Requires
         authentication with Cognito ID token.
+      requestBody:
+        required: true
+        description: Media upload request
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUploadRequest"
       responses:
         "200":
           description: Upload URL generated successfully

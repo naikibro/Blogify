@@ -9,15 +9,12 @@
     "documentation"
   ],
   "scripts": {
-    "dev:functions": "yarn workspace @blogify/functions dev",
-    "dev:frontend": "yarn workspace @blogify/frontend dev",
-    "dev:docs": "yarn workspace documentation start",
-    "deploy:functions": "yarn workspace @blogify/functions deploy",
-    "deploy:functions:dev": "yarn workspace @blogify/functions deploy:dev",
-    "deploy:functions:prod": "yarn workspace @blogify/functions deploy:prod",
-    "build:functions": "yarn workspace @blogify/functions type-check",
-    "build:frontend": "yarn workspace @blogify/frontend build",
-    "build:docs": "yarn workspace documentation build",
+    "dev:docs": "yarn workspace docs start",
+    "functions:deploy": "yarn workspace @blogify/functions deploy:dev",
+    "functions:deploy:prod": "yarn workspace @blogify/functions deploy:prod",
+    "functions:info": "yarn workspace @blogify/functions info",
+    "docs": "yarn workspace docs build && yarn workspace docs start",
+    "frontend": "yarn workspace @blogify/frontend dev",
     "lint": "yarn workspaces run lint"
   },
   "keywords": [
