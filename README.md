@@ -28,18 +28,35 @@ Serverless blogging platform built with AWS Lambda, DynamoDB, S3, and Cognito.
 
 ## Quick Start
 
-```bash
-# Install dependencies
+### Install dependencies
+
+```sh
 yarn install
-
-# Run backend locally
-yarn dev:functions  # API at http://localhost:3000
-
-# Run frontend locally
-yarn dev:frontend  # Frontend at http://localhost:4000
 ```
 
-**Frontend local API**: Create `frontend/.env.local` with `NEXT_PUBLIC_API_URL=http://localhost:3000/dev`
+### Run backend locally
+
+```sh
+yarn functions:deploy
+```
+
+Get the serverless API url
+
+```sh
+yarn functions:info
+```
+
+### Run frontend locally
+
+```sh
+yarn frontend
+```
+
+Modify the `.env.local` in the frontend folder to point to your deployed serverless api
+
+```sh
+NEXT_PUBLIC_API_URL=your-deployed-api
+```
 
 ## Deployment
 
