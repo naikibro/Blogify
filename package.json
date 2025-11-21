@@ -12,6 +12,8 @@
     "dev:docs": "yarn workspace docs start",
     "functions:deploy": "yarn workspace @blogify/functions deploy:dev",
     "functions:deploy:prod": "yarn workspace @blogify/functions deploy:prod",
+    "functions:remove": "yarn workspace @blogify/functions remove:dev",
+    "functions:remove:prod": "yarn workspace @blogify/functions remove:prod",
     "functions:info": "yarn workspace @blogify/functions info",
     "docs": "yarn workspace docs build && yarn workspace docs start",
     "frontend": "yarn workspace @blogify/frontend dev",
